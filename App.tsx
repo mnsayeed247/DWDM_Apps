@@ -158,7 +158,8 @@ const App: React.FC = () => {
   ];
 
   const canEdit = currentUser.role !== UserRole.VIEWER;
-
+  const renderView = () => <h1>React is working!</h1>;
+/*
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
@@ -175,7 +176,7 @@ const App: React.FC = () => {
             onBulkAdd={addBulkItems} 
             onTrack={(sn) => { setSelectedTrackingSN(sn); setCurrentView('tracking'); }} 
           />
-        );
+        ); */
       case 'warehouses':
         return <WarehouseList warehouses={warehouses} items={items} canEdit={canEdit} onUpdate={updateWarehouse} onAdd={addWarehouse} />;
       case 'transfers':

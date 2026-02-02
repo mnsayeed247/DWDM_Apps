@@ -27,7 +27,8 @@ import {
   ArrowRightLeft,
   Sparkles,
   Loader2,
-  BrainCircuit
+  BrainCircuit,
+  Lock
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { GoogleGenAI } from "@google/genai";
@@ -55,6 +56,11 @@ const Dashboard: React.FC<DashboardProps> = ({ items, warehouses, logs }) => {
   }, [items]);
 
   const generateAIInsight = async () => {
+    if (!process.env.API_KEY) {
+      setAiInsight("API Key not found. Please set the API_KEY environment variable in your Netlify dashboard settings.");
+      return;
+    }
+
     setIsGenerating(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -80,7 +86,7 @@ const Dashboard: React.FC<DashboardProps> = ({ items, warehouses, logs }) => {
       setAiInsight(response.text || "Unable to generate insights at this time.");
     } catch (error) {
       console.error("AI Generation Error:", error);
-      setAiInsight("Error connecting to AI advisor. Please check your API configuration.");
+      setAiInsight("Error connecting to AI advisor. Please verify your project's billing and API key permissions.");
     } finally {
       setIsGenerating(false);
     }
@@ -125,7 +131,7 @@ const Dashboard: React.FC<DashboardProps> = ({ items, warehouses, logs }) => {
               <div className="p-2 bg-white/20 rounded-lg">
                 <Sparkles className="w-5 h-5 text-indigo-100" />
               </div>
-              <h3 className="text-xl font-bold">Smart Inventory Advisor</h3>
+              <h3 className="text-xl font-bold tracking-tight">Smart Inventory Advisor</h3>
             </div>
             <button 
               onClick={generateAIInsight}
@@ -138,7 +144,12 @@ const Dashboard: React.FC<DashboardProps> = ({ items, warehouses, logs }) => {
           </div>
           
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10 min-h-[100px]">
-            {aiInsight ? (
+            {!process.env.API_KEY ? (
+              <div className="flex flex-col items-center justify-center py-4 text-indigo-100/60">
+                <Lock className="w-8 h-8 mb-2" />
+                <p className="text-sm">Connect your Gemini API Key in Netlify Settings to enable smart insights.</p>
+              </div>
+            ) : aiInsight ? (
               <div className="prose prose-invert prose-sm max-w-none">
                 <p className="whitespace-pre-line leading-relaxed text-indigo-50 font-medium">
                   {aiInsight}

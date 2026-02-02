@@ -89,6 +89,10 @@ import WarehouseList from './components/WarehouseList';
 import Transfers from './components/Transfers';
 import TransferHistory from './components/TransferHistory';
 import ItemTracking from './components/ItemTracking';
+//cgatgpt
+const GOOGLE_SCRIPT_URL = import.meta.env.VITE_GOOGLE_SCRIPT_URL;
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+//end
 
 const STORAGE_KEYS = {
   ITEMS: 'dwdm_inventory_items',

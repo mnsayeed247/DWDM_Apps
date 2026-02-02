@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
@@ -79,10 +78,31 @@ const App: React.FC = () => {
       newItems[index] = { ...updatedItem, lastModified: Date.now() };
       return newItems;
     });
+    
+    // Log the update if the serial number changed for audit tracking
+    if (oldSerialNumber !== updatedItem.serialNumber) {
+      const log: TransferLog = {
+        id: `upd-sn-${Date.now()}`,
+        timestamp: Date.now(),
+        itemId: updatedItem.serialNumber,
+        serialNumber: updatedItem.serialNumber,
+        boardName: updatedItem.boardName,
+        partNumber: updatedItem.partNumber,
+        fromWarehouseId: 'SYSTEM',
+        toWarehouseId: 'SYSTEM',
+        reason: `Serial number changed from ${oldSerialNumber}`,
+        user: currentUser.name,
+        quantity: 1
+      };
+      setLogs(prev => [log, ...prev]);
+    }
   };
 
   const deleteItem = (serialNumber: string) => {
-    if (window.confirm(`Are you sure you want to delete item ${serialNumber}? This action cannot be undone.`)) {
+    const itemToDelete = items.find(i => i.serialNumber === serialNumber);
+    if (!itemToDelete) return;
+
+    if (window.confirm(`Are you sure you want to delete item ${serialNumber} (${itemToDelete.boardName})? This action cannot be undone.`)) {
       setItems(prev => prev.filter(item => item.serialNumber !== serialNumber));
       
       const log: TransferLog = {
@@ -90,9 +110,9 @@ const App: React.FC = () => {
         timestamp: Date.now(),
         itemId: serialNumber,
         serialNumber: serialNumber,
-        boardName: 'Deleted Item',
-        partNumber: 'N/A',
-        fromWarehouseId: 'SYSTEM',
+        boardName: itemToDelete.boardName,
+        partNumber: itemToDelete.partNumber,
+        fromWarehouseId: itemToDelete.warehouseId,
         toWarehouseId: 'DELETED',
         reason: 'Item removed from system',
         user: currentUser.name,
@@ -186,7 +206,7 @@ const App: React.FC = () => {
               onClick={() => setCurrentView(item.id as ViewType)}
               className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${
                 currentView === item.id 
-                ? 'bg-indigo-600 text-white' 
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
                 : 'text-slate-400 hover:bg-slate-800 hover:text-white'
               }`}
             >
@@ -196,24 +216,24 @@ const App: React.FC = () => {
           ))}
         </nav>
 
-        <div className="p-4 bg-slate-800 m-4 rounded-2xl">
+        <div className="p-4 bg-slate-800 m-4 rounded-2xl border border-slate-700">
           <div className="flex items-center space-x-3 mb-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-sm font-bold">
+            <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-sm font-bold border-2 border-slate-700">
               {currentUser.name.charAt(0)}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold truncate">{currentUser.name}</p>
+              <p className="text-sm font-semibold truncate text-white">{currentUser.name}</p>
               <p className="text-xs text-slate-400">{currentUser.role}</p>
             </div>
           </div>
           <select 
-            className="w-full bg-slate-700 text-xs border-none rounded py-1.5 px-2 focus:ring-0 cursor-pointer"
+            className="w-full bg-slate-900 text-xs border-none rounded-lg py-1.5 px-2 focus:ring-1 focus:ring-indigo-500 cursor-pointer text-slate-300"
             value={currentUser.role}
             onChange={(e) => setCurrentUser(prev => ({ ...prev, role: e.target.value as UserRole }))}
           >
-            <option value={UserRole.ADMIN}>Admin</option>
-            <option value={UserRole.MANAGER}>Manager</option>
-            <option value={UserRole.VIEWER}>Viewer</option>
+            <option value={UserRole.ADMIN}>Admin Role</option>
+            <option value={UserRole.MANAGER}>Manager Role</option>
+            <option value={UserRole.VIEWER}>Viewer Only</option>
           </select>
         </div>
       </aside>
@@ -224,23 +244,24 @@ const App: React.FC = () => {
             <button className="lg:hidden p-2 text-slate-500" onClick={() => setIsMobileMenuOpen(true)}>
               <Menu className="w-6 h-6" />
             </button>
-            <h2 className="text-lg font-semibold text-slate-800 capitalize">
+            <h2 className="text-lg font-bold text-slate-800 capitalize tracking-tight">
               {currentView.replace('-', ' ')}
             </h2>
           </div>
           <div className="flex items-center space-x-4">
             <div className="hidden md:flex flex-col items-end">
-              <span className="text-sm font-medium text-slate-700">{currentUser.name}</span>
-              <span className="text-xs text-slate-500">{currentUser.role}</span>
+              <span className="text-sm font-semibold text-slate-700">{currentUser.name}</span>
+              <span className="text-xs text-slate-400">{currentUser.role}</span>
             </div>
-            <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+            <div className="w-px h-6 bg-slate-200 mx-2 hidden md:block"></div>
+            <button className="p-2 text-slate-400 hover:text-red-500 transition-colors">
               <LogOut className="w-5 h-5" />
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-6 lg:p-8">
-          <div className="max-w-7xl mx-auto">
+        <div className="flex-1 overflow-y-auto p-6 lg:p-8 scroll-smooth">
+          <div className="max-w-7xl mx-auto pb-12">
             {renderView()}
           </div>
         </div>
@@ -250,16 +271,16 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-50 flex lg:hidden">
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
           <div className="relative w-72 bg-slate-900 text-white h-full flex flex-col animate-in slide-in-from-left duration-300">
-            <div className="p-6 flex items-center justify-between">
+            <div className="p-6 flex items-center justify-between border-b border-slate-800">
               <div className="flex items-center space-x-3">
                 <Package className="w-6 h-6 text-indigo-500" />
-                <span className="text-xl font-bold">DWDM Inventory</span>
+                <span className="text-xl font-bold tracking-tight">DWDM Inventory</span>
               </div>
               <button onClick={() => setIsMobileMenuOpen(false)}>
-                <X className="w-6 h-6" />
+                <X className="w-6 h-6 text-slate-400" />
               </button>
             </div>
-            <nav className="flex-1 px-4 py-2 space-y-1">
+            <nav className="flex-1 px-4 py-6 space-y-1">
               {navItems.map((item) => (
                 <button
                   key={item.id}
@@ -268,7 +289,7 @@ const App: React.FC = () => {
                     setIsMobileMenuOpen(false);
                   }}
                   className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${
-                    currentView === item.id ? 'bg-indigo-600' : 'text-slate-400 hover:bg-slate-800'
+                    currentView === item.id ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800'
                   }`}
                 >
                   <item.icon className="w-5 h-5" />

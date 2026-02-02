@@ -1,0 +1,51 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Advanced DWDM Inventory Management System for multi-warehouse tracking." />
+    <meta name="theme-color" content="#4f46e5" />
+    <title>Inventory | DWDM Management System</title>
+    
+    <!-- Netlify Custom Domain & SEO -->
+    <meta property="og:title" content="DWDM Inventory System" />
+    <meta property="og:description" content="Real-time multi-warehouse inventory tracking and transfer logging." />
+    <meta property="og:type" content="website" />
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      body { 
+        font-family: 'Inter', sans-serif; 
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #f1f1f1; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      
+      /* Smooth transitions for view switching */
+      .view-fade-enter { opacity: 0; transform: translateY(10px); }
+      .view-fade-enter-active { opacity: 1; transform: translateY(0); transition: all 300ms ease-out; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "date-fns": "https://esm.sh/date-fns@^4.1.0",
+    "recharts": "https://esm.sh/recharts@^3.7.0",
+    "xlsx": "https://esm.sh/xlsx@0.18.5"
+  }
+}
+</script>
+</head>
+  <body class="bg-slate-50 text-slate-900 antialiased overflow-x-hidden">
+    <div id="root"></div>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+  </body>
+</html>

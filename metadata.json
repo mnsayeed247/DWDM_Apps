@@ -1,0 +1,5 @@
+{
+  "name": "DWDM Inventory - Advanced Management",
+  "description": "A high-performance inventory tracking system for multi-warehouse DWDM and electronic components, featuring real-time analytics, serialized item tracking, and robust transfer logging.",
+  "requestFramePermissions": []
+}

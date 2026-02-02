@@ -1,4 +1,48 @@
-import React, { useState, useEffect } from 'react';
+
+/**
+ * GOOGLE APPS SCRIPT CODE (Paste this in your Google Sheet > Extensions > Apps Script):
+ * 
+ * function doGet(e) {
+ *   var ss = SpreadsheetApp.getActiveSpreadsheet();
+ *   return ContentService.createTextOutput(JSON.stringify({
+ *     warehouses: transform(ss.getSheetByName("Warehouses").getDataRange().getValues()),
+ *     items: transform(ss.getSheetByName("Items").getDataRange().getValues()),
+ *     logs: transform(ss.getSheetByName("Logs").getDataRange().getValues())
+ *   })).setMimeType(ContentService.MimeType.JSON);
+ * }
+ * 
+ * function doPost(e) {
+ *   var data = JSON.parse(e.postData.contents);
+ *   var ss = SpreadsheetApp.getActiveSpreadsheet();
+ *   if(data.warehouses) updateSheet(ss.getSheetByName("Warehouses"), data.warehouses);
+ *   if(data.items) updateSheet(ss.getSheetByName("Items"), data.items);
+ *   if(data.logs) updateSheet(ss.getSheetByName("Logs"), data.logs);
+ *   return ContentService.createTextOutput("OK");
+ * }
+ * 
+ * function transform(vals) {
+ *   if (vals.length < 2) return [];
+ *   var headers = vals[0];
+ *   var result = [];
+ *   for (var i = 1; i < vals.length; i++) {
+ *     var obj = {};
+ *     for (var j = 0; j < headers.length; j++) { obj[headers[j]] = vals[i][j]; }
+ *     result.push(obj);
+ *   }
+ *   return result;
+ * }
+ * 
+ * function updateSheet(sheet, data) {
+ *   sheet.clear();
+ *   if (!data || data.length == 0) return;
+ *   var headers = Object.keys(data[0]);
+ *   sheet.appendRow(headers);
+ *   var values = data.map(function(row) { return headers.map(function(h) { return row[h]; }); });
+ *   sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+ * }
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   LayoutDashboard, 
   Package, 
@@ -11,7 +55,12 @@ import {
   User as UserIcon,
   Menu,
   X,
-  ChevronRight
+  Cloud,
+  CloudUpload,
+  CloudDownload,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { 
   Warehouse, 
@@ -29,6 +78,13 @@ import Transfers from './components/Transfers';
 import TransferHistory from './components/TransferHistory';
 import ItemTracking from './components/ItemTracking';
 
+const STORAGE_KEYS = {
+  ITEMS: 'dwdm_inventory_items',
+  WAREHOUSES: 'dwdm_inventory_warehouses',
+  LOGS: 'dwdm_inventory_logs',
+  LAST_SYNC: 'dwdm_inventory_last_sync'
+};
+
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [currentUser, setCurrentUser] = useState<{ name: string; role: UserRole }>({
@@ -37,10 +93,90 @@ const App: React.FC = () => {
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  const [warehouses, setWarehouses] = useState<Warehouse[]>(INITIAL_WAREHOUSES);
-  const [items, setItems] = useState<InventoryItem[]>(INITIAL_ITEMS);
-  const [logs, setLogs] = useState<TransferLog[]>(INITIAL_LOGS);
+  // State initialization with localStorage fallback
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.WAREHOUSES);
+    return saved ? JSON.parse(saved) : INITIAL_WAREHOUSES;
+  });
+  
+  const [items, setItems] = useState<InventoryItem[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.ITEMS);
+    return saved ? JSON.parse(saved) : INITIAL_ITEMS;
+  });
+  
+  const [logs, setLogs] = useState<TransferLog[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.LOGS);
+    return saved ? JSON.parse(saved) : INITIAL_LOGS;
+  });
+
+  const [lastSync, setLastSync] = useState<string | null>(localStorage.getItem(STORAGE_KEYS.LAST_SYNC));
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [selectedTrackingSN, setSelectedTrackingSN] = useState<string | null>(null);
+
+  // Persistence to LocalStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.WAREHOUSES, JSON.stringify(warehouses));
+  }, [warehouses]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.ITEMS, JSON.stringify(items));
+  }, [items]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs));
+  }, [logs]);
+
+  // Cloud Sync Functions
+  const syncToCloud = async () => {
+    const scriptUrl = process.env.GOOGLE_SCRIPT_URL;
+    if (!scriptUrl) {
+      alert("Google Script URL not found in environment variables. Please set GOOGLE_SCRIPT_URL in Netlify.");
+      return;
+    }
+
+    setSyncStatus('syncing');
+    try {
+      const response = await fetch(scriptUrl, {
+        method: 'POST',
+        mode: 'no-cors', // Apps Script requires no-cors for simple web app posts
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ warehouses, items, logs })
+      });
+      
+      const now = new Date().toLocaleString();
+      setLastSync(now);
+      localStorage.setItem(STORAGE_KEYS.LAST_SYNC, now);
+      setSyncStatus('success');
+      setTimeout(() => setSyncStatus('idle'), 3000);
+    } catch (error) {
+      console.error("Cloud Sync Error:", error);
+      setSyncStatus('error');
+    }
+  };
+
+  const pullFromCloud = async () => {
+    const scriptUrl = process.env.GOOGLE_SCRIPT_URL;
+    if (!scriptUrl) return;
+
+    setSyncStatus('syncing');
+    try {
+      const response = await fetch(scriptUrl);
+      const data = await response.json();
+      
+      if (data.warehouses) setWarehouses(data.warehouses);
+      if (data.items) setItems(data.items);
+      if (data.logs) setLogs(data.logs);
+      
+      const now = new Date().toLocaleString();
+      setLastSync(now);
+      localStorage.setItem(STORAGE_KEYS.LAST_SYNC, now);
+      setSyncStatus('success');
+      setTimeout(() => setSyncStatus('idle'), 3000);
+    } catch (error) {
+      console.error("Cloud Pull Error:", error);
+      setSyncStatus('error');
+    }
+  };
 
   const handleTransfer = (transfer: TransferLog) => {
     setItems(prev => prev.map(item => 
@@ -78,33 +214,14 @@ const App: React.FC = () => {
       newItems[index] = { ...updatedItem, lastModified: Date.now() };
       return newItems;
     });
-    
-    // Log the update if the serial number changed for audit tracking
-    if (oldSerialNumber !== updatedItem.serialNumber) {
-      const log: TransferLog = {
-        id: `upd-sn-${Date.now()}`,
-        timestamp: Date.now(),
-        itemId: updatedItem.serialNumber,
-        serialNumber: updatedItem.serialNumber,
-        boardName: updatedItem.boardName,
-        partNumber: updatedItem.partNumber,
-        fromWarehouseId: 'SYSTEM',
-        toWarehouseId: 'SYSTEM',
-        reason: `Serial number changed from ${oldSerialNumber}`,
-        user: currentUser.name,
-        quantity: 1
-      };
-      setLogs(prev => [log, ...prev]);
-    }
   };
 
   const deleteItem = (serialNumber: string) => {
     const itemToDelete = items.find(i => i.serialNumber === serialNumber);
     if (!itemToDelete) return;
 
-    if (window.confirm(`Are you sure you want to delete item ${serialNumber} (${itemToDelete.boardName})? This action cannot be undone.`)) {
+    if (window.confirm(`Are you sure you want to delete item ${serialNumber}?`)) {
       setItems(prev => prev.filter(item => item.serialNumber !== serialNumber));
-      
       const log: TransferLog = {
         id: `del-${Date.now()}`,
         timestamp: Date.now(),
@@ -124,28 +241,6 @@ const App: React.FC = () => {
 
   const addBulkItems = (newItems: InventoryItem[]) => {
     setItems(prev => [...prev, ...newItems]);
-    const bulkLogs: TransferLog[] = newItems.map(item => ({
-      id: `bulk-${item.serialNumber}-${Date.now()}`,
-      timestamp: Date.now(),
-      itemId: item.serialNumber,
-      serialNumber: item.serialNumber,
-      boardName: item.boardName,
-      partNumber: item.partNumber,
-      fromWarehouseId: 'EXTERNAL',
-      toWarehouseId: item.warehouseId,
-      reason: 'Bulk Data Import',
-      user: currentUser.name,
-      quantity: 1
-    }));
-    setLogs(prev => [...bulkLogs, ...prev]);
-  };
-
-  const updateWarehouse = (updatedWh: Warehouse) => {
-    setWarehouses(prev => prev.map(wh => wh.id === updatedWh.id ? updatedWh : wh));
-  };
-
-  const addWarehouse = (newWh: Warehouse) => {
-    setWarehouses(prev => [...prev, newWh]);
   };
 
   const navItems = [
@@ -158,36 +253,6 @@ const App: React.FC = () => {
   ];
 
   const canEdit = currentUser.role !== UserRole.VIEWER;
-
-  const renderView = () => {
-    switch (currentView) {
-      case 'dashboard':
-        return <Dashboard items={items} warehouses={warehouses} logs={logs} />;
-      case 'inventory':
-        return (
-          <Inventory 
-            items={items} 
-            warehouses={warehouses} 
-            canEdit={canEdit} 
-            onAdd={addItem} 
-            onUpdate={updateItem}
-            onDelete={deleteItem}
-            onBulkAdd={addBulkItems} 
-            onTrack={(sn) => { setSelectedTrackingSN(sn); setCurrentView('tracking'); }} 
-          />
-        );
-      case 'warehouses':
-        return <WarehouseList warehouses={warehouses} items={items} canEdit={canEdit} onUpdate={updateWarehouse} onAdd={addWarehouse} />;
-      case 'transfers':
-        return <Transfers items={items} warehouses={warehouses} onTransfer={handleTransfer} user={currentUser.name} canEdit={canEdit} />;
-      case 'history':
-        return <TransferHistory logs={logs} warehouses={warehouses} />;
-      case 'tracking':
-        return <ItemTracking logs={logs} items={items} initialSN={selectedTrackingSN || ''} />;
-      default:
-        return <Dashboard items={items} warehouses={warehouses} logs={logs} />;
-    }
-  };
 
   return (
     <div className="flex min-h-screen bg-slate-50 overflow-hidden">
@@ -217,24 +282,30 @@ const App: React.FC = () => {
         </nav>
 
         <div className="p-4 bg-slate-800 m-4 rounded-2xl border border-slate-700">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-sm font-bold border-2 border-slate-700">
-              {currentUser.name.charAt(0)}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <Cloud className={`w-4 h-4 ${syncStatus === 'success' ? 'text-emerald-400' : 'text-slate-400'}`} />
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Cloud Sync</span>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold truncate text-white">{currentUser.name}</p>
-              <p className="text-xs text-slate-400">{currentUser.role}</p>
-            </div>
+            {syncStatus === 'syncing' && <RefreshCw className="w-3 h-3 text-indigo-400 animate-spin" />}
           </div>
-          <select 
-            className="w-full bg-slate-900 text-xs border-none rounded-lg py-1.5 px-2 focus:ring-1 focus:ring-indigo-500 cursor-pointer text-slate-300"
-            value={currentUser.role}
-            onChange={(e) => setCurrentUser(prev => ({ ...prev, role: e.target.value as UserRole }))}
-          >
-            <option value={UserRole.ADMIN}>Admin Role</option>
-            <option value={UserRole.MANAGER}>Manager Role</option>
-            <option value={UserRole.VIEWER}>Viewer Only</option>
-          </select>
+          <div className="flex flex-col gap-2">
+            <button 
+              onClick={syncToCloud}
+              className="w-full flex items-center justify-center space-x-2 py-2 bg-slate-900 hover:bg-slate-900/50 rounded-lg text-xs font-bold transition-all border border-slate-700"
+            >
+              <CloudUpload className="w-3.5 h-3.5" />
+              <span>Backup Now</span>
+            </button>
+            <button 
+              onClick={pullFromCloud}
+              className="w-full flex items-center justify-center space-x-2 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-bold transition-all"
+            >
+              <CloudDownload className="w-3.5 h-3.5" />
+              <span>Restore Data</span>
+            </button>
+          </div>
+          {lastSync && <p className="text-[9px] text-slate-500 mt-3 text-center italic">Last sync: {lastSync}</p>}
         </div>
       </aside>
 
@@ -248,25 +319,39 @@ const App: React.FC = () => {
               {currentView.replace('-', ' ')}
             </h2>
           </div>
-          <div className="flex items-center space-x-4">
-            <div className="hidden md:flex flex-col items-end">
-              <span className="text-sm font-semibold text-slate-700">{currentUser.name}</span>
-              <span className="text-xs text-slate-400">{currentUser.role}</span>
+          
+          <div className="flex items-center space-x-6">
+            <div className="hidden lg:flex items-center space-x-2 text-slate-400 border-r pr-6 border-slate-100">
+               {syncStatus === 'success' && <div className="flex items-center text-emerald-600 text-xs font-bold animate-in fade-in zoom-in"><CheckCircle2 className="w-4 h-4 mr-1" /> Cloud Synced</div>}
+               {syncStatus === 'error' && <div className="flex items-center text-red-500 text-xs font-bold"><AlertCircle className="w-4 h-4 mr-1" /> Sync Failed</div>}
+               {syncStatus === 'idle' && lastSync && <span className="text-xs">Sheet Connected</span>}
             </div>
-            <div className="w-px h-6 bg-slate-200 mx-2 hidden md:block"></div>
-            <button className="p-2 text-slate-400 hover:text-red-500 transition-colors">
-              <LogOut className="w-5 h-5" />
-            </button>
+
+            <div className="flex items-center space-x-4">
+              <div className="hidden md:flex flex-col items-end">
+                <span className="text-sm font-semibold text-slate-700">{currentUser.name}</span>
+                <span className="text-xs text-slate-400">{currentUser.role}</span>
+              </div>
+              <button className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </header>
 
         <div className="flex-1 overflow-y-auto p-6 lg:p-8 scroll-smooth">
           <div className="max-w-7xl mx-auto pb-12">
-            {renderView()}
+            {currentView === 'dashboard' && <Dashboard items={items} warehouses={warehouses} logs={logs} />}
+            {currentView === 'inventory' && <Inventory items={items} warehouses={warehouses} canEdit={canEdit} onAdd={addItem} onUpdate={updateItem} onDelete={deleteItem} onBulkAdd={addBulkItems} onTrack={(sn) => { setSelectedTrackingSN(sn); setCurrentView('tracking'); }} />}
+            {currentView === 'warehouses' && <WarehouseList warehouses={warehouses} items={items} canEdit={canEdit} onUpdate={(wh) => setWarehouses(prev => prev.map(w => w.id === wh.id ? wh : w))} onAdd={(wh) => setWarehouses(prev => [...prev, wh])} />}
+            {currentView === 'transfers' && <Transfers items={items} warehouses={warehouses} onTransfer={handleTransfer} user={currentUser.name} canEdit={canEdit} />}
+            {currentView === 'history' && <TransferHistory logs={logs} warehouses={warehouses} />}
+            {currentView === 'tracking' && <ItemTracking logs={logs} items={items} initialSN={selectedTrackingSN || ''} />}
           </div>
         </div>
       </main>
-
+      
+      {/* Mobile Menu Logic remains similar but with Sync buttons */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex lg:hidden">
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
@@ -284,19 +369,18 @@ const App: React.FC = () => {
               {navItems.map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => {
-                    setCurrentView(item.id as ViewType);
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${
-                    currentView === item.id ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800'
-                  }`}
+                  onClick={() => { setCurrentView(item.id as ViewType); setIsMobileMenuOpen(false); }}
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${currentView === item.id ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
                 >
                   <item.icon className="w-5 h-5" />
                   <span className="font-medium">{item.label}</span>
                 </button>
               ))}
             </nav>
+            <div className="p-6 bg-slate-800 m-4 rounded-2xl">
+               <button onClick={syncToCloud} className="w-full py-3 bg-indigo-600 rounded-xl font-bold mb-2">Cloud Backup</button>
+               <button onClick={pullFromCloud} className="w-full py-3 bg-slate-700 rounded-xl font-bold">Restore Sheet Data</button>
+            </div>
           </div>
         </div>
       )}

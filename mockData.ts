@@ -1,139 +1,34 @@
-// mockdata.ts
+
 import { Warehouse, InventoryItem, ItemStatus, TransferLog } from './types';
-import { google } from "googleapis";
-import serviceAccount from "./service-account.json"; // your service account JSON
 
-const SPREADSHEET_ID = "1mQtXUOuo_K8Aa1bU4hU7ykq-LE2rN5pH-64aHLf4vzA";
+export const INITIAL_WAREHOUSES: Warehouse[] = [
+  { id: 'wh-001', name: 'Main Store (Central)', isCentral: true, location: 'Building A, Floor 1' },
+  { id: 'wh-002', name: 'R&D Lab North', isCentral: false, location: 'Building B, Floor 2' },
+  { id: 'wh-003', name: 'Assembly Line 4', isCentral: false, location: 'Building C, Floor 1' },
+  { id: 'wh-004', name: 'Quality Assurance', isCentral: false, location: 'Building B, Floor 3' },
+];
 
-const SHEET_WAREHOUSES = "Warehouses";
-const SHEET_ITEMS = "Items";
-const SHEET_LOGS = "Logs";
+export const INITIAL_ITEMS: InventoryItem[] = [
+  { serialNumber: 'SN-X1011', partNumber: 'PN-782', boardName: 'Main Controller V2', category: 'Logic', status: ItemStatus.FREE, warehouseId: 'wh-001', lastModified: Date.now() },
+  { serialNumber: 'SN-X1002', partNumber: 'PN-782', boardName: 'Main Controller V2', category: 'Logic', status: ItemStatus.FREE, warehouseId: 'wh-001', lastModified: Date.now() },
+  { serialNumber: 'SN-P2001', partNumber: 'PN-412', boardName: 'Power Shield 30A', category: 'Power', status: ItemStatus.USED, warehouseId: 'wh-002', lastModified: Date.now() },
+  { serialNumber: 'SN-C3001', partNumber: 'PN-991', boardName: 'Comms Bridge WiFi', category: 'Wireless', status: ItemStatus.RESERVED, warehouseId: 'wh-001', lastModified: Date.now() },
+  { serialNumber: 'SN-D4001', partNumber: 'PN-223', boardName: 'Display Module 7"', category: 'UI', status: ItemStatus.FAULTY, warehouseId: 'wh-004', lastModified: Date.now() },
+  { serialNumber: 'SN-X1003', partNumber: 'PN-782', boardName: 'Main Controller V2', category: 'Logic', status: ItemStatus.FREE, warehouseId: 'wh-003', lastModified: Date.now() },
+];
 
-// ----------------- Google Sheets Client -----------------
-const auth = new google.auth.JWT(
-  serviceAccount.client_email,
-  undefined,
-  serviceAccount.private_key,
-  ["https://www.googleapis.com/auth/spreadsheets"]
-);
-const sheets = google.sheets({ version: "v4", auth });
-
-// ----------------- WAREHOUSES -----------------
-export const fetchWarehouses = async (): Promise<Warehouse[]> => {
-  try {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_WAREHOUSES}!A:D`,
-    });
-    const rows = res.data.values || [];
-    return rows.slice(1).map(r => ({
-      id: r[0],
-      name: r[1],
-      isCentral: r[2]?.toUpperCase() === "TRUE",
-      location: r[3],
-    }));
-  } catch (err) {
-    console.error("fetchWarehouses error:", err);
-    return [];
+export const INITIAL_LOGS: TransferLog[] = [
+  { 
+    id: 'tr-001', 
+    timestamp: Date.now() - 86400000 * 2, 
+    itemId: 'SN-P2001', 
+    serialNumber: 'SN-P2001', 
+    boardName: 'Power Shield 30A', 
+    partNumber: 'PN-412', 
+    fromWarehouseId: 'wh-001', 
+    toWarehouseId: 'wh-002', 
+    reason: 'Initial allocation for R&D Project Alpha', 
+    user: 'John Doe', 
+    quantity: 1 
   }
-};
-
-// ----------------- ITEMS -----------------
-export const fetchItems = async (): Promise<InventoryItem[]> => {
-  try {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_ITEMS}!A:G`,
-    });
-    const rows = res.data.values || [];
-    return rows.slice(1).map(r => ({
-      serialNumber: r[0],
-      partNumber: r[1],
-      boardName: r[2],
-      category: r[3],
-      status: r[4] as ItemStatus,
-      warehouseId: r[5],
-      lastModified: Number(r[6]),
-    }));
-  } catch (err) {
-    console.error("fetchItems error:", err);
-    return [];
-  }
-};
-
-export const addItem = async (item: InventoryItem) => {
-  try {
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_ITEMS}!A:G`,
-      valueInputOption: "USER_ENTERED",
-      requestBody: {
-        values: [[
-          item.serialNumber,
-          item.partNumber,
-          item.boardName,
-          item.category,
-          item.status,
-          item.warehouseId,
-          item.lastModified
-        ]]
-      }
-    });
-  } catch (err) {
-    console.error("addItem error:", err);
-  }
-};
-
-// ----------------- LOGS -----------------
-export const fetchLogs = async (): Promise<TransferLog[]> => {
-  try {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_LOGS}!A:K`,
-    });
-    const rows = res.data.values || [];
-    return rows.slice(1).map(r => ({
-      id: r[0],
-      timestamp: Number(r[1]),
-      itemId: r[2],
-      serialNumber: r[3],
-      boardName: r[4],
-      partNumber: r[5],
-      fromWarehouseId: r[6],
-      toWarehouseId: r[7],
-      reason: r[8],
-      user: r[9],
-      quantity: Number(r[10]),
-    }));
-  } catch (err) {
-    console.error("fetchLogs error:", err);
-    return [];
-  }
-};
-
-export const addLog = async (log: TransferLog) => {
-  try {
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_LOGS}!A:K`,
-      valueInputOption: "USER_ENTERED",
-      requestBody: {
-        values: [[
-          log.id,
-          log.timestamp,
-          log.itemId,
-          log.serialNumber,
-          log.boardName,
-          log.partNumber,
-          log.fromWarehouseId,
-          log.toWarehouseId,
-          log.reason,
-          log.user,
-          log.quantity
-        ]]
-      }
-    });
-  } catch (err) {
-    console.error("addLog error:", err);
-  }
-};
+];
